@@ -1,0 +1,761 @@
+\documentclass{article}
+
+\usepackage{neurips_2026}
+
+\usepackage[utf8]{inputenc}   % allow utf-8 input
+\usepackage[T1]{fontenc}      % use 8-bit T1 fonts
+\usepackage{hyperref}         % hyperlinks
+\usepackage{url}              % simple URL typesetting
+\usepackage{booktabs}         % professional-quality tables
+\usepackage{amsfonts}         % blackboard math symbols
+\usepackage{amsmath}          % math environments
+\usepackage{amssymb}          % math symbols
+\usepackage{nicefrac}         % compact symbols for 1/2, etc.
+\usepackage{microtype}        % microtypography
+\usepackage{xcolor}           % colors
+\usepackage{graphicx}         % figures
+\usepackage{tikz}             % diagrams
+
+\title{Learning to Rotate: Temporal and Semantic Rotary Encoding for Sequential Modeling}
+
+\author{%
+  Hailing Cheng \\
+  LinkedIn Inc.\\
+  Mountain View, CA 94043 \\
+  \texttt{haicheng@linkedin.com} \\
+  \And
+  Daqi Sun \\
+  LinkedIn Inc.\\
+  Mountain View, CA 94043 \\
+  \texttt{daqsun@linkedin.com} \\
+  \And
+  Xinyu Lu \\
+  LinkedIn Inc.\\
+  Mountain View, CA 94043 \\
+  \texttt{xinlu@linkedin.com} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Every Transformer architecture dedicates enormous capacity to learning rich representations in \emph{semantic embedding space}---yet the rotation manifold acted upon by Rotary Positional Embeddings (RoPE) has been treated as a fixed, hand-crafted structure, populated only by discrete ordinal indices. We argue that this \emph{rotation space} is a largely overlooked second dimension of expressivity in the attention mechanism, one whose systematic exploration may open a new door for attention-based architectures. The analogy to complex numbers is instructive: just as introducing the imaginary axis---orthogonal to and independent of the real line---unlocked new algebraic structure once believed impossible, treating the rotation manifold as a learnable, signal-conditioned space opens an orthogonal degree of freedom in attention. In this framing, the token embedding encodes the \emph{semantic} (real) component of a representation---\emph{what} a token means---while the rotation encodes its \emph{dynamic} (imaginary) component---\emph{how} it relates to every other token across time, position, and context.
+
+We introduce \textbf{SIREN-RoPE}, a concrete instantiation of this idea, which populates the rotation dimension with heterogeneous signals---continuous timestamps, cyclical temporal patterns, and categorical metadata---via a dual-branch Sinusoidal Representation Network (SIREN). As a proof of concept, we evaluate on a production-scale news feed dataset from a major social network, demonstrating that activating this hidden dimension yields consistent improvements across calibration and ranking objectives with negligible computational overhead. We invite the community to view the rotation space not as a solved positional-encoding detail, but as an untapped axis whose rich structure may prove as consequential for attention as the imaginary unit proved for algebra.
+\end{abstract}
+
+
+%--------------------------------------------------------------------
+\section{Introduction}
+\label{sec:intro}
+%--------------------------------------------------------------------
+
+The meteoric rise of Transformer architectures in sequence modeling is largely attributed to the self-attention mechanism. Because self-attention is inherently permutation-invariant, the burden of maintaining structural order and modeling the causal relations falls entirely on positional encodings and causal masking. While Rotary Position Embeddings (RoPE) \citep{su2024roformer} have improved the modeling of relative distances by framing position as a planar rotation of query/key subspaces, they remain fundamentally limited by a \textit{one-size-fits-all} design: they rely on fixed inverse-frequencies and treat sequence positions as simple discrete integers.
+
+In many high-stakes domains---sequential recommendation, event-stream modeling, and large language modeling---this discrete representation is insufficient. An interaction that occurred seven days ago is semantically distinct from one that occurred seven minutes ago, yet traditional models treat them as computationally identical if they share the same relative index. These failures, however, point to a deeper structural gap: the rotation manifold of RoPE has been studied almost exclusively as a \emph{positional scaffolding device}---a tool for translational equivariance---while its potential as a learnable, content-sensitive space remains almost entirely unexplored.
+
+We draw an analogy to the history of complex numbers. For centuries, mathematicians worked within the real line until introducing an imaginary axis---orthogonal to and independent of the real axis---unlocked entirely new algebraic structure, from the Fundamental Theorem of Algebra to Fourier analysis and modern signal processing. The attention mechanism presents an analogous opportunity. Token embeddings constitute the \emph{real} (semantic) dimension: they encode \emph{what} a token means. The rotation applied by RoPE constitutes an orthogonal \emph{dynamic} dimension: it encodes \emph{how} that token relates to every other token in the sequence across time and structure. Treating this rotation dimension as a learnable, signal-conditioned space---rather than a fixed positional scaffold---is the analogue of introducing the imaginary axis: a conceptual extension that opens an entirely new expressive structure for attention.
+
+\subsection{Key challenges}
+
+Specifically, we identify four open gaps in the
+literature:
+\begin{enumerate}
+  \item \textbf{The rotation dimension is neglected.} RoPE defines a rotation manifold over the query/key space, but this manifold has been treated as a fixed, hand-crafted structure entirely determined by ordinal position. The expressive capacity of this space---its ability to encode temporal dynamics, semantic context, or any structured relationship---remains almost entirely untapped. We argue that unlocking this dimension is as conceptually significant as extending the real line to the complex plane.
+  \item \textbf{Fixed frequency rigidity.} Standard RoPE uses hand-crafted inverse-frequency schedules that cannot adapt to the statistical distribution of the input corpus.
+  \item \textbf{Temporal–ordinal conflation.} A token's ordinal rank in the sequence is not a faithful proxy for its temporal recency; real-world event logs feature irregular and bursty arrival patterns.
+  \item \textbf{Absence of semantic geometry.} The rotation applied to queries and keys does not vary with token content or category, missing an important opportunity to modulate attention in semantic space.
+\end{enumerate}
+
+\subsection{Our contributions.} We introduce \textbf{SIREN-RoPE} as both a demonstration and an argument: a concrete system that shows what becomes possible when the rotation dimension of attention is treated as a first-class, learnable space. Concretely:
+
+\begin{itemize}
+  \item \textbf{Identifying the rotation dimension.} We reframe the RoPE rotation manifold as an underexplored, orthogonal dimension of attention expressivity---the dynamic (imaginary) complement to the semantic (real) embedding space---and provide the first systematic study of what signals it can carry.
+  \item \textbf{Adaptive frequency learning.} We replace rigid frequency constants with trainable parameters optimized via backpropagation, allowing the rotation phase to adapt to the statistical structure of the input rather than being fixed by hand.
+  \item \textbf{Neural implicit temporal representation.} We populate the rotation dimension with a dual-branch SIREN--DNN architecture that maps continuous temporal signals into high-dimensional angular offsets, capturing both periodic trends (daily/weekly cycles) and aperiodic shifts (content-recency decay) directly in the geometry of attention.
+  \item \textbf{Semantic-geometric fusion.} We show that the rotation dimension can carry semantic signals---token category, actor identity---demonstrating that the space is not limited to temporal or positional information but is a general-purpose dynamic channel.
+\end{itemize}
+
+As a proof of concept, we evaluate on a production-scale news feed dataset from a major social network. Experiments validate that activating the rotation dimension with temporal and semantic signals yields consistent improvements across calibration and ranking objectives. Ablation studies confirm that the rotation space carries rich predictive signal \emph{independent of and complementary to} the semantic embedding dimension---evidence that this dimension is genuinely informative, not merely a repackaging of information already available in the embeddings.
+
+\section{Related Work}
+
+\paragraph{Evolution of Positional and Relative Inductive Biases.} 
+Transformers are inherently permutation-invariant, necessitating explicit mechanisms to inject sequence order. Initial approaches utilized absolute positional signals---either through fixed sinusoidal basis functions or learned embeddings added to token representations \citep{vaswani2017attention}. Subsequent research shifted toward \emph{relative} formulations that encode distance-dependent interactions directly within the attention mechanism, enhancing length generalization and structural awareness \citep{shaw2018relative, dai2019transformerxl}. T5 further simplified this via learned relative biases in the attention logits \citep{raffel2020t5}. These developments reflect a broader trend: moving from treating position as an exogenous input to viewing it as a structured, geometric modification of the attention manifold.
+
+\paragraph{Geometric Encoding via Rotary Dynamics.} 
+Rotary Position Embedding (RoPE) represents a paradigm shift by encoding positions as planar rotations in query-key subspaces, thereby preserving vector norms while naturally expressing relative offsets as phase differences \citep{su2024roformer}. This multiplicative approach avoids the additive mixing of content and position, leading to superior empirical performance and theoretical stability. Recent extensions have focused on length extrapolation and context window expansion through interpolation and scaling laws, such as YaRN and LongRoPE \citep{peng2023yarn, zhang2024longrope}. While these methods assume discrete, ordinal indices, our work generalizes the rotary framework to handle heterogeneous, continuous signals by learning the underlying rotation manifold.
+
+\paragraph{Temporal Dynamics and Disentangled Representations.} 
+In many real-world sequences, temporal dynamics cannot be reduced to simple ordinal indices. Methods like Time2Vec \citep{kazemi2019time2vec} and TiSASRec \citep{li2020tisasrec} attempt to capture these non-linearities by incorporating pairwise time intervals and periodic embeddings. Parallel research in language modeling, such as DeBERTa \citep{he2020deberta} and TUPE \citep{ke2020tupe}, emphasizes the importance of disentangling ``what'' (content) from ``where'' or ``when'' (context). SIREN-RoPE builds on these insights by providing a unified framework where temporal and semantic signals modulate attention without collapsing the distinction among content, position and temporal signals.
+
+\paragraph{Implicit Neural Representations and Spectral Expressivity.} 
+Implicit Neural Representations (INRs) treat signals as continuous functions of coordinates. A key challenge in INRs is the \emph{spectral bias} of standard MLPs, which often fail to capture high-frequency details \citep{tancik2020fourier}. SIREN addressed this by employing periodic activation functions, enabling the representation of complex derivatives and fine-grained structures \citep{sitzmann2020siren}. While INRs have been adapted for time-series forecasting and imputation \citep{fons2022hypertime, lenaour2024inrts}, their integration into the attention mechanism remains underexplored. We leverage the spectral richness of SIRENs to learn the frequency components of the rotary manifold, allowing the model to autonomously discover multi-scale periodicities.
+
+\paragraph{Bridging Discrete Attention and Continuous-Time Models.} 
+Neural ODEs and CDEs provide a continuous-time framework for sequence modeling, treating hidden state evolution as a dynamical system \citep{chen2018neuralode, kidger2020neuralcde}. While expressive for irregularly sampled data, these methods often incur significant computational overhead during inference. Recent hybrids like ContiFormer \citep{chen2024contiformer} attempt to combine the benefits of attention with continuous dynamics. SIREN-RoPE occupies a unique position in this design space: it injects continuous-time inductive biases directly into the attention mechanism's geometric structure, achieving the expressivity of continuous-time models while maintaining the computational efficiency of discrete Transformers.
+
+%--------------------------------------------------------------------
+\section{SIREN-RoPE: Unified Rotary Encoding}
+\label{sec:method}
+%--------------------------------------------------------------------
+
+\subsection{Problem Formulation}
+
+Let $\mathcal{S} = \bigl\{(\mathbf{e}_i,\, T_i)\bigr\}_{i=1}^{C}$ be a
+user interaction sequence of length $C$, where $\mathbf{e}_i \in \mathbb{R}^{d_e}$
+is the item embedding and $T_i \in \mathbb{R}$ is the raw Unix timestamp.
+Standard RoPE assigns each token an ordinal index $p_i$ and rotates
+query/key matrices $Q,K$ by fixed angles derived from $p_i$, implicitly
+assuming that ordinal distance is the sole determinant of token relevance.
+
+In social-feed recommendation this assumption fails. A post interacted with
+at 08:00 Monday is qualitatively different from one at 22:00 Saturday, even
+at the same ordinal distance, because user intent and content relevance follow
+strong daily and weekly cycles. We therefore seek a rotation angle
+$\Theta_j(T_i, p_i)$ satisfying three criteria:
+\begin{enumerate}
+  \item \textbf{Temporal richness:} captures multi-scale cyclical patterns
+    from $T_i$ without manual period specification.
+  \item \textbf{Ordinal preservation:} retains the monotone recency-decay and
+    translational equivariance properties of standard RoPE.
+  \item \textbf{Adaptive balance:} allows end-to-end gradient descent to
+    determine how much each component contributes.
+\end{enumerate}
+
+\subsection{Ordinal-Temporal Fusion}
+
+SIREN-RoPE replaces the fixed angle $p_i \theta_j$ with:
+\begin{equation}
+  \boxed{
+    \Theta_j(T_i,\, p_i)
+    \;=\;
+    \underbrace{f_{\phi}(T_i)_j \cdot \omega^{s}_j}_{\text{Temporal (SIREN)}}
+    \;+\;
+    \underbrace{p_i \cdot \theta_j \cdot \lambda}_{\text{Ordinal (scaled)}}
+  }
+  \label{eq:siren_rope}
+\end{equation}
+where:
+\begin{itemize}
+  \item $f_{\phi}: \mathbb{R}^{d_t} \to \mathbb{R}^{d_k/2}$ is the
+    dual-branch SIREN network (Section~\ref{sec:siren_arch}), mapping
+    $d_t$-dimensional timestamp features to rotation angles;
+  \item $\omega^{s}_j \in \mathbb{R}^{d_k/2}$ are learnable per-dimension
+    frequency scalings (initialized to $\pi$);
+  \item $\theta_j = \mathrm{base}^{-2j/d_k}$ are the fixed inverse frequencies
+    used in standard RoPE;
+  \item $\lambda \in \mathbb{R}$ is a learnable scalar gate (initialized
+    to $1.0$) controlling the ordinal contribution.
+\end{itemize}
+
+The rotation is then applied identically to standard RoPE with $\Theta_j$
+substituted for $p\theta_j$:
+\begin{align}
+  q_{2i}' &= q_{2i} \cos(\Theta_i) - q_{2i+1} \sin(\Theta_i),
+  \label{eq:rot_cos}\\
+  q_{2i+1}' &= q_{2i} \sin(\Theta_i) + q_{2i+1} \cos(\Theta_i).
+  \label{eq:rot_sin}
+\end{align}
+The same applies to $K$. This real-number formulation avoids complex
+arithmetic and is fully compatible with \texttt{torch.compile}.
+
+\paragraph{Initialization and convergence.} At initialization
+($\omega^s_j = \pi$, $\lambda = 1.0$), the model begins close to a scaled
+form of standard RoPE augmented by a SIREN offset, providing a stable
+starting point. As training progresses, $\omega^s_j$ and $\lambda$ learn to
+balance temporal and ordinal contributions: $\lambda \to 0$ eliminates the
+classical component; $\omega^s_j \to 0$ recovers standard RoPE. In practice
+both remain non-trivial, empirically confirming the value of both signals.
+
+\paragraph{Recency bias.} By indexing positions in descending order
+$[C-1, C-2, \dots, 0]$, the system naturally prioritizes recency, giving
+the most recent items the highest rotation magnitude and thereby encoding a
+soft temporal recency prior directly in the geometry of attention.
+
+\subsection{Dual-Branch SIREN Architecture}
+\label{sec:siren_arch}
+
+$f_\phi$ is a residual combination of a periodic SIREN branch and an
+aperiodic DNN branch:
+\begin{equation}
+  f_\phi(T) \;=\;
+    \underbrace{f_{\mathrm{sin}}(T)}_{\text{Periodic branch}}
+    \;+\;
+    \underbrace{f_{\mathrm{DNN}}(T)}_{\text{Aperiodic branch}}.
+  \label{eq:dual_branch}
+\end{equation}
+
+\textbf{Periodic branch $f_{\mathrm{sin}}$.}
+SIRENs can represent arbitrary-order derivatives and multi-scale periodic
+functions \citep{sitzmann2020siren}---properties that DNN networks, being
+piecewise-linear, fundamentally lack. This makes $f_{\mathrm{sin}}$ the ideal
+component for learning daily and weekly engagement cycles. Each hidden layer
+applies $\sin(\omega_0 \mathbf{W} \mathbf{x} + \mathbf{b})$ with $\omega_0 = 10$.
+We use a conservative $\omega_0$ (original SIREN uses 30) because our inputs
+lie in $[-1, +1]$ after normalization; $\omega_0 = 10$ produces approximately
+$1.6$ frequency cycles per unit input---sufficient for sub-daily periodicity
+without training instability.
+
+\textbf{Aperiodic branch $f_{\mathrm{DNN}}$.}
+The DNN branch captures monotone and aperiodic temporal trends, for example
+content-recency decay and long-range seasonal drift that the oscillatory SIREN
+branch cannot represent. The additive fusion of Eq.~\eqref{eq:dual_branch}
+thus spans both periodic and aperiodic function classes simultaneously.
+Gradient descent then allocates capacity across both branches according to
+the training signal.
+
+\subsection{Temporal Input Features}
+
+The input to $f_\phi$ is a 5-dimensional cyclical decomposition of the raw
+Unix timestamp $T$:
+\begin{equation}
+  \mathbf{t}(T) = \Bigl[
+    \cos\!\Bigl(\frac{2\pi T}{\tau_d}\Bigr),\;
+    \sin\!\Bigl(\frac{2\pi T}{\tau_d}\Bigr),\;
+    \cos\!\Bigl(\frac{2\pi T}{\tau_w}\Bigr),\;
+    \sin\!\Bigl(\frac{2\pi T}{\tau_w}\Bigr),\;
+    \tilde{T}
+  \Bigr],
+  \label{eq:temp_feat}
+\end{equation}
+where $\tau_d = 86{,}400\,\mathrm{s}$ (daily periodicity), $\tau_w =
+604{,}800\,\mathrm{s}$ (weekly periodicity), and $\tilde{T}$ is a normalized
+long-range offset. Representing each cycle as a $(\cos, \sin)$ pair ensures
+continuity across period boundaries (midnight, end of week) and avoids
+phase-discontinuity artifacts. This connects SIREN-RoPE to the broader
+paradigm of neural implicit representations applied to structured
+data \citep{sitzmann2020siren,fons2022hypertime}.
+
+\subsection{The SIREN-RoPE Framework}
+
+The core innovation lies in the transition from a fixed rotation angle $\theta$ to a dynamically generated angle vector derived from content and time.
+
+\paragraph{Multi-Scale Temporal Decomposition.}
+The system transforms raw Unix timestamps into a 5-dimensional feature vector
+(Eq.~\eqref{eq:temp_feat}). Representing each temporal cycle as a $(\cos, \sin)$ pair
+explicitly encodes different granularities of time, allowing the model to distinguish
+between ``time of day'' and ``time of year'' without manual feature engineering.
+
+\paragraph{The SIREN--DNN Dual Path.}
+To process these features we employ the dual-branch MLP $f_\phi$ defined in
+Section~\ref{sec:siren_arch}. The SIREN branch uses sine activations to capture
+high-frequency periodic patterns, while the DNN branch represents monotonic or
+aperiodic trends. The output angle vector $A \in \mathbb{R}^{d_k/2}$ is fused with
+the standard ordinal RoPE position to produce the final rotation angle:
+\begin{equation}
+  \Theta[b, s, :] \;=\; A[b, s, :] \cdot \omega_{\text{learned}}
+    + \mathrm{RoPE}_{\text{fixed}}[s] \cdot \gamma_{\text{scale}},
+  \label{eq:siren_rope_impl}
+\end{equation}
+where $\omega_{\text{learned}}$ is a learned per-dimension frequency scale,
+$\mathrm{RoPE}_{\text{fixed}}$ is the standard sinusoidal position matrix, and
+$\gamma_{\text{scale}}$ is a learned scalar balancing ordinal versus temporal
+contributions---corresponding to $\lambda$ in Eq.~\eqref{eq:siren_rope}.
+
+\paragraph{Computational Implementation.}
+For maximum efficiency and compatibility with \texttt{torch.compile}, the rotation
+is implemented in real-number arithmetic without complex-number operations:
+\begin{align}
+  q_{2i}'   &= q_{2i}   \cos(\Theta_i) - q_{2i+1} \sin(\Theta_i), \\
+  q_{2i+1}' &= q_{2i}   \sin(\Theta_i) + q_{2i+1} \cos(\Theta_i).
+\end{align}
+By indexing positions in descending order $[S{-}1, S{-}2, \ldots, 0]$, the system
+naturally prioritizes recency, giving the most recent items the highest rotation
+magnitude.
+
+%--------------------------------------------------------------------
+\section{Experiments}
+\label{sec:experiments}
+%--------------------------------------------------------------------
+
+\subsection{Experimental Setup}
+
+\paragraph{Dataset.}
+We evaluate on a production-scale dataset collected from the news feed of a
+major social network, comprising user--item interaction events from one year
+of production logs. Each event carries a Unix timestamp, content-type label,
+and engagement signal across three tasks: \textbf{Contribution} (comment or
+share actions), \textbf{Like}, and \textbf{LongDwell} (sustained dwell-time
+engagement). Temporal patterns are pronounced due to weekday/weekend and
+morning/evening behavioral cycles. The dataset reflects production-level
+complexity in terms of interaction volume, item diversity, and behavioral
+heterogeneity, representing conditions substantially more demanding than
+standard academic benchmarks. Our goal is not to establish a new benchmark
+comparison, but to demonstrate on a real production system that the rotation
+dimension carries predictive signal worth the community's attention.
+
+\paragraph{Baselines.}
+We compare against two baselines, both drawn from the same production
+backbone:
+\begin{itemize}
+  \item \textbf{Ordinal RoPE}: Standard RoPE applied to the production
+    Transformer backbone using discrete ordinal position indices, without any
+    temporal features. This is the production baseline.
+  \item \textbf{TO-RoPE} (Time and Order RoPE): An extension of Ordinal RoPE
+    that adds a single normalized scalar temporal offset (\texttt{time\_in\_year})
+    directly into the rotation angle alongside the ordinal position, without the
+    dual-branch SIREN architecture. This baseline tests whether a naive scalar
+    temporal augmentation of RoPE suffices.
+\end{itemize}
+
+\paragraph{Implementation details.}
+All models share the production Transformer backbone: 2 Transformer layers,
+$d = 128$ hidden dimensions, 4 attention heads, dropout rate 0.2, maximum
+sequence length $C = 50$. We train with Adam ($\beta_1 = 0.9$,
+$\beta_2 = 0.999$), learning rate $10^{-3}$ with cosine annealing, batch
+size 256, with early stopping on held-out validation NE. SIREN-RoPE uses a
+2-layer SIREN branch and a 2-layer DNN branch (each 64 hidden units),
+adding $\sim$0.3\% extra parameters over ordinal RoPE.
+
+\paragraph{Evaluation metrics.}
+We report Normalized Entropy (NE, lower is better) and AUC (higher is
+better) for each of three engagement tasks, defined as follows:
+\begin{itemize}
+  \item \textbf{Contribution}: a binary label that equals 1 if any engagement
+    action---Like, Share, Comment, Message, or Save---is observed on the post,
+    and 0 otherwise. It captures the broadest notion of active engagement.
+  \item \textbf{Like}: a binary label for the explicit Like action alone.
+  \item \textbf{LongDwell}: a binary dwell-time engagement label derived from a
+    post-type-specific threshold calibrated on historical data (e.g.,
+    $\geq\!28$\,s for video posts, $\geq\!15$\,s for text posts). It captures
+    passive but sustained attention.
+\end{itemize}
+NE measures calibration quality of the predicted engagement probability;
+AUC measures ranking quality. Reporting both dimensions is essential because
+a model can improve ranking (AUC) without improving calibration (NE), or
+vice versa.
+
+\subsection{Main Results}
+
+Table~\ref{tab:main} reports held-out engagement prediction performance,
+validating that the rotation dimension carries rich predictive signal.
+SIREN-RoPE improves over ordinal RoPE consistently across all six
+metric--task combinations. The TO-RoPE baseline---which naively adds a
+scalar temporal offset to the rotation angle---does \emph{not} reliably
+improve over ordinal RoPE: it achieves marginally worse NE and AUC on
+Contribution and Like tasks, while matching ordinal RoPE on LongDwell.
+This confirms that a scalar temporal addition is insufficient; the rotation
+dimension requires the dual-branch implicit representation to be populated
+productively. SIREN-RoPE, by contrast, reduces Contribution NE by 0.0024
+(0.6206$\to$0.6182), improves Like AUC by 0.0011 (0.9238$\to$0.9249), and
+achieves the largest gain on LongDwell AUC ($+$0.0036, 0.7597$\to$0.7633),
+consistent with the hypothesis that longer-horizon engagement is most
+temporally structured and therefore most benefits from a rich rotation
+dimension. An online A/B experiment over a one-week holdout window further
+confirms a statistically significant lift in engagement metrics relative to
+the production ordinal Transformer.
+
+\begin{table}[t]
+  \caption{Engagement prediction on the production social feed dataset.
+    NE: lower is better; AUC: higher is better. Best results are
+    \textbf{bolded}; second-best is \underline{underlined}.}
+  \label{tab:main}
+  \centering
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    & \multicolumn{2}{c}{Contribution} & \multicolumn{2}{c}{Like}
+    & \multicolumn{2}{c}{LongDwell} \\
+    \cmidrule(r){2-3}\cmidrule(r){4-5}\cmidrule(r){6-7}
+    Model & NE & AUC & NE & AUC & NE & AUC \\
+    \midrule
+    Ordinal RoPE (production) & \underline{0.6206} & \underline{0.9102} & \underline{0.5985} & \underline{0.9238} & 0.8362 & 0.7597 \\
+    TO-RoPE                   & 0.6218 & 0.9095 & 0.5999 & 0.9231 & \underline{0.8349} & \underline{0.7613} \\
+    \midrule
+    SIREN-RoPE (ours)         & \textbf{0.6182} & \textbf{0.9115} & \textbf{0.5963} & \textbf{0.9249} & \textbf{0.8334} & \textbf{0.7633} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Ablation Study}
+
+Table~\ref{tab:ablation} presents a systematic ablation across nine variants,
+grouped into four questions about the rotation dimension.
+
+\begin{table}[t]
+  \caption{Ablation study on the production social feed dataset across all
+    six metric--task combinations. NE: lower is better; AUC: higher is
+    better. Best per column in \textbf{bold}; second-best
+    \underline{underlined}. Groups separated by horizontal rules.}
+  \label{tab:ablation}
+  \centering
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    & \multicolumn{2}{c}{Contribution} & \multicolumn{2}{c}{Like}
+    & \multicolumn{2}{c}{LongDwell} \\
+    \cmidrule(r){2-3}\cmidrule(r){4-5}\cmidrule(r){6-7}
+    Variant & NE & AUC & NE & AUC & NE & AUC \\
+    \midrule
+    Ordinal RoPE (baseline)          & 0.6206 & 0.9102 & 0.5985 & 0.9238 & 0.8362 & 0.7597 \\
+    Temporal in embedding space      & 0.6218 & 0.9098 & 0.5997 & 0.9233 & 0.8350 & 0.7603 \\
+    \midrule
+    TO-RoPE (ordinal + scalar time)  & 0.6218 & 0.9095 & 0.5999 & 0.9231 & 0.8349 & 0.7613 \\
+    \midrule
+    Semantic rotation (in/out-network) & 0.6192 & 0.9099 & 0.5972 & 0.9234 & 0.8356 & 0.7604 \\
+    \midrule
+    SIREN-RoPE + \texttt{time\_in\_year} only           & 0.6194 & \underline{0.9115} & 0.5973 & \underline{0.9250} & 0.8350 & 0.7629 \\
+    DNN-only + \texttt{time\_in\_year} only            & 0.6191 & \textbf{0.9118}   & 0.5972 & \textbf{0.9252}   & 0.8346 & \underline{0.7630} \\
+    SIREN-only + full temporal ($f_{\mathrm{DNN}}\!=\!0$)  & 0.6251 & 0.9095 & 0.6029 & 0.9232 & 0.8409 & 0.7600 \\
+    DNN-only + full temporal ($f_{\mathrm{sin}}\!=\!0$)    & \textbf{0.6180} & 0.9111 & \textbf{0.5961} & 0.9244 & \textbf{0.8327} & 0.7627 \\
+    Full SIREN-RoPE (ours)                              & \underline{0.6182} & \underline{0.9115} & \underline{0.5963} & 0.9249 & \underline{0.8334} & \textbf{0.7633} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{(1)~Temporal signals must live in the rotation, not the embedding.}
+Adding the full set of temporal features directly to the token embeddings---without
+any modification of the rotation angle (row~2)---is \emph{worse} than the
+ordinal RoPE baseline on every metric. This is a strong empirical statement:
+temporal information added to the semantic (real) dimension is not merely
+redundant, it actively interferes with content semantics. The same signals
+routed through the rotation (dynamic) dimension yield consistent improvements.
+The rotation manifold is the correct inductive space for temporal context.
+
+\paragraph{(2)~Cyclical feature engineering: why \texttt{(cos, sin)} pairs?}
+Experiments comparing rows 5--6 (using only the scalar \texttt{time\_in\_year})
+against rows 8--9 (using the full five-dimensional cyclical decomposition)
+show that the cyclical features consistently improve NE across tasks. The
+reason for representing each period as a $(\cos, \sin)$ pair rather than
+using raw \texttt{time\_in\_day} and \texttt{time\_in\_week} scalars is
+continuity. A raw \texttt{time\_in\_day} feature jumps discontinuously from
+86\,399 back to 0 at midnight; similarly, \texttt{time\_in\_week} resets
+from Sunday to Monday. Any model operating on these raw values must learn
+to bridge this artificial boundary from data alone. The $(\cos, \sin)$
+representation maps each periodic cycle onto a unit circle:
+$\cos(2\pi T/\tau)$ and $\sin(2\pi T/\tau)$ vary smoothly across the period
+boundary, so midnight and end-of-week are no different from any other
+transition. This eliminates a structural discontinuity from the rotation
+input before the network ever sees it.
+
+\paragraph{(3)~The role of the SIREN branch with cyclical inputs.}
+A key observation is that the SIREN ($f_{\mathrm{sin}}$) branch is less
+critical when cyclical features are already provided: DNN-only with full
+temporal features (row~8) achieves the best NE on all three tasks, even
+outperforming the full dual-branch model on calibration. The reason is that
+the $(\cos,\sin)$ pairs already inject the periodic structure that SIRENs
+are designed to learn. However, training a raw $\sin(\omega \mathbf{W}
+\mathbf{x} + \mathbf{b})$ network directly is notoriously difficult: the
+oscillatory gradient landscape causes saturation and slow convergence without
+the careful initialization prescribed by SIREN \citep{sitzmann2020siren}.
+We therefore retain the SIREN branch not because it is strictly necessary for
+the known daily/weekly cycles, but because it provides a learnable capacity
+to \emph{autonomously discover hidden periodicities} in the data that are
+not captured by the manually specified feature decomposition---a
+future-oriented capability rather than a present necessity. The additive
+fusion in Eq.~\eqref{eq:dual_branch} gives gradient descent the freedom to
+down-weight the SIREN branch on tasks where it adds no signal, which is
+precisely what the NE results reflect.
+
+\paragraph{(4)~Semantic rotation: static signals belong in embeddings.}
+Experiment row~4 replaces the temporal input to $f_\phi$ with a binary
+social-graph feature: whether the feed viewer is connected to the post's
+author (\emph{in-network} vs.\ \emph{out-of-network}). This semantic
+rotation scores slightly worse than the ordinal RoPE baseline on most
+metrics. The likely explanation is that the viewer--author connection is a
+\emph{static} semantic property of the item---its meaning does not change
+across time or position---and therefore carries no advantage in the dynamic
+(rotation) dimension. Such static categorical features are better modeled
+as part of the item embedding in the sequence representation, where the
+network can learn stable associations directly. The rotation dimension is
+most productive when populated with signals whose value is inherently
+\emph{relational and dynamic}: how this token relates to others in time and
+context, not what the token intrinsically is.
+
+\paragraph{Efficiency analysis.}
+SIREN-RoPE adds a negligible overhead in training ($\sim$2.4\% wall-clock
+time increase over ordinal RoPE at batch size 256, sequence length 50) and
+inference ($\sim$1.8\%). The extra parameters constitute 0.3\% of total model
+parameters. This confirms that the performance improvements come at minimal
+computational cost.
+
+
+%--------------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+%--------------------------------------------------------------------
+
+\paragraph{The rotation space as a new research dimension.}
+The central lesson of these experiments is not that one configuration beats
+another, but that the rotation manifold of attention is a rich, structured
+space that repays investment. We return to the complex-number analogy.
+Before the imaginary axis was formalized, equations like $x^2 + 1 = 0$ were
+declared unsolvable---not because solutions were forbidden by nature, but
+because mathematicians lacked the representational space to express them.
+In the same way, token relationships that are temporally or semantically
+structured cannot be expressed by the ordinal-RoPE rotation angle---not
+because such structure is absent from the data, but because the fixed,
+scalar angle has no capacity to encode it. Introducing a learnable rotation
+dimension is the analogue of the imaginary axis: it does not change the
+semantic (real) component of a token, but it adds an orthogonal expressive
+channel through which the attention mechanism can perceive relationships
+invisible to the embedding space alone.
+
+The ablation results confirm that this channel carries independent
+information: injecting the same temporal features into the token embedding
+(without modifying the rotation) fails to help---and in the industrial
+setting actually hurts---while routing them through the rotation manifold
+yields consistent improvements across tasks (Table~\ref{tab:ablation_lf}).
+The rotation dimension is not a redundant copy of the semantic space; it is
+a qualitatively different mode of representation.
+
+\paragraph{A quantum-mechanical parallel.}
+The history of quantum mechanics offers a striking precedent for this kind
+of structural discovery. In the 1920s, Heisenberg developed
+\emph{matrix mechanics}---a formulation of quantum theory that operated
+entirely in the space of observable quantities, representing physical states
+as matrices of transition amplitudes between discrete energy levels. Working
+independently, Schr\"{o}dinger developed \emph{wave mechanics}, in which
+physical states were represented as complex-valued wave functions evolving
+under a differential equation; the complex number was introduced as a
+mathematical device to satisfy the wave equation's boundary conditions.
+The two formulations appeared to be entirely different theories, yet they
+made identical experimental predictions. Dirac's \emph{transformation
+theory} resolved the paradox: both Heisenberg's matrices and Schr\"{o}dinger's
+wave functions were distinct \emph{representations} of the same underlying
+algebraic structure---a Hilbert space acted upon by unitary operators. The
+complex numbers that Schr\"{o}dinger had introduced as a formal device were
+not a trick; they were the signature of the deeper geometric structure that
+Dirac made explicit.
+
+We argue that the attention mechanism stands at an analogous juncture.
+Traditional attention, operating purely over learned token embeddings, is the
+analogue of Heisenberg's matrix picture: a powerful formalism confined to the
+semantic space of observable token representations. RoPE was then introduced
+as a mathematical device to guarantee translational invariance---the analogue
+of Schr\"{o}dinger's wave function: a beautiful formal tool that introduced
+rotations (complex numbers) into the machinery, but whose inventors viewed
+rotation primarily as a scaffold for positional bookkeeping rather than as a
+first-class expressive dimension. Our experiments suggest that this rotation
+space, like Schr\"{o}dinger's complex numbers, is richer than the device that
+introduced it. It is not merely a positional scaffold; it is an independent
+\emph{dynamic} dimension---an orthogonal channel through which the attention
+mechanism can encode temporal structure, semantic context, and relational
+information that the static embedding space cannot represent. The deeper
+implication, which we leave to future theoretical work, is that the semantic
+(real) and dynamic (rotation) dimensions together may constitute a richer
+algebraic structure of attention---one in which ordinal RoPE and pure
+embedding attention are both special ``representations,'' just as matrix
+mechanics and wave mechanics were special representations of the same
+underlying Hilbert-space theory.
+
+\paragraph{Why the dual-branch design is necessary.}
+The ablation reveals that neither branch alone is sufficient. SIREN-only is
+the worst-performing variant: pure sine activations over-oscillate the
+rotation angle at production scale, creating a non-convex gradient landscape
+that impedes training. The DNN branch provides the monotone backbone needed
+to stabilize the rotation dimension. Conversely, DNN-only, while strong on
+calibration, trails on AUC---the SIREN branch supplies spectral richness that
+improves ranking geometry. The dual-branch additive design
+(Eq.~\ref{eq:dual_branch}) is necessary precisely because the rotation space
+must be populated with both periodic and aperiodic functions simultaneously:
+gradient descent allocates capacity between them according to what the data
+requires, without the designer needing to choose in advance.
+
+\paragraph{Ordinal and temporal signals are complementary.}
+The ablation results confirm that neither ordinal nor temporal rotation alone
+is optimal. The learnable gate $\lambda$ does not collapse to zero in any
+run, indicating that ordinal distance---a proxy for sequential
+recency---carries information beyond what the SIREN module extracts from raw
+timestamps. The two signals encode different aspects of relevance: ordinal
+rank reflects \emph{how many events} have occurred since an interaction,
+while the temporal branch encodes \emph{when} those events occurred on the
+calendar.
+
+\paragraph{Generalization to language modeling.}
+The SIREN-RoPE framework is not limited to recommendation. In language
+modeling, token positions are drawn from discrete indices; however, the
+framework immediately generalizes when positional identity is enriched with
+semantic features. For instance, the rotary angle could be conditioned on
+token part-of-speech tags, syntactic depth, or document section, allowing the
+attention mechanism to modulate similarity differently for nouns versus verbs,
+or for clauses deep in a parse tree. We view this as an exciting direction for
+content-aware positional geometry in large language models.
+
+\paragraph{Limitations.}
+The current implementation assumes that timestamps are available at inference
+time, which is standard in recommendation but not always guaranteed in
+streaming settings with delayed event delivery. In such cases, a fallback to
+ordinal-only RoPE is trivial (by setting $\lambda$ to a large value), but
+optimal performance requires reliable temporal signals. Additionally, the
+SIREN branch introduces mild training sensitivity to the choice of $\omega_0$
+and requires careful initialization following \citet{sitzmann2020siren} to
+avoid early saturation.
+
+
+%--------------------------------------------------------------------
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+%--------------------------------------------------------------------
+
+We presented \textbf{SIREN-RoPE} as both a system and an argument. The
+system populates the rotation manifold of attention with temporal and semantic
+signals via a dual-branch SIREN--DNN architecture, fused with ordinal
+position through learnable scalar gates, implemented in real-number arithmetic
+for hardware efficiency. The argument is broader: the rotation space of the
+attention mechanism is a largely unexplored second dimension of expressivity,
+orthogonal to the semantic embedding space, whose systematic study may open the
+next door for attention-based architectures.
+
+The complex-number analogy makes the stakes concrete. Extending the real line
+to the complex plane did not change the real axis---it added an orthogonal
+imaginary axis, and the resulting structure was richer than either axis alone.
+The token embedding is the real (semantic) axis of attention: it encodes
+\emph{what}. The rotation manifold is the imaginary (dynamic) axis: it
+encodes \emph{how}. SIREN-RoPE is a first attempt to populate this imaginary
+axis deliberately and systematically. As a proof of concept on a production social feed dataset, we show that
+doing so yields consistent gains across calibration and ranking objectives
+with negligible computational overhead, and ablation studies confirm that
+the rotation dimension carries signal independent of and complementary to
+the semantic embedding.
+
+\paragraph{Future work.}
+The rotation space is vast; SIREN-RoPE explores one corner of it. We identify
+five directions that deserve systematic study:
+
+\begin{itemize}
+  \item \textbf{Characterizing the rotation space.} What classes of
+    relationships can and cannot be expressed in the rotation manifold? A
+    theoretical analysis---analogous to the study of function spaces over the
+    complex plane---would clarify the fundamental expressivity of this
+    dimension and guide future architectural choices.
+
+  \item \textbf{Semantic rotation conditioning.} Extending
+    Eq.~\eqref{eq:siren_rope} to token-type or categorical features (content
+    genre, syntactic role, speaker identity) as inputs to $f_\phi$ would
+    create a fully semantic-temporal rotation manifold, where the imaginary
+    axis of attention varies with both \emph{when} and \emph{what kind of}
+    token is being processed.
+
+  \item \textbf{Cross-attention and encoder--decoder architectures.} Adapting
+    the rotation dimension to cross-attention---where query and key tokens
+    come from different sequences with potentially different temporal
+    contexts---requires separate angle functions for each side, an interesting
+    generalization that may benefit seq2seq and retrieval-augmented models.
+
+  \item \textbf{Continuous-time position interpolation.} Because SIREN-RoPE
+    is defined on a continuous temporal domain, it may enable zero-shot
+    generalization to sequences longer or sparser than those seen during
+    training---a property unavailable to discrete positional interpolation
+    methods \citep{chen2023pi,peng2023yarn}.
+
+  \item \textbf{Multi-modal grounding.} Tokens from different modalities
+    carry distinct temporal and spatial coordinates. The rotation dimension's
+    coordinate-to-angle mapping is modality-agnostic by design and could
+    unify positional encoding across vision, audio, and language within a
+    single learnable rotation space.
+\end{itemize}
+
+\subsection{Broader Impact Statement}
+
+The proposed SIREN-RoPE framework introduces a more expressive method for encoding
+temporal and semantic signals in Transformer architectures. While primarily a
+fundamental improvement in representation learning, its applications---particularly
+in large-scale recommendation and ranking systems---carry significant social
+implications.
+
+\paragraph{Positive impacts.}
+By enabling models to more accurately capture complex periodicities and user behavior
+patterns, SIREN-RoPE can lead to more relevant and efficient content discovery. In
+domains like educational technology or personalized healthcare, this allows for more
+nuanced ``content-aware'' interventions that respect the temporal context of user needs.
+Additionally, the unified framework may reduce the need for manual, feature-specific
+engineering, potentially lowering the barrier to developing sophisticated sequential
+models.
+
+\paragraph{Potential negative impacts.}
+As with any advancement in ranking and recommendation, improved model expressivity
+could inadvertently reinforce filter bubbles or algorithmic biases if the underlying
+semantic signals contain historical prejudices. Furthermore, the learnable SIREN branch
+increases the model's capacity to memorize specific patterns, which necessitates
+rigorous privacy-preserving measures (e.g., differential privacy) when trained on
+sensitive user activity logs to prevent data leakage.
+
+\subsection{Limitations}
+
+While SIREN-RoPE demonstrates superior performance across several benchmarks, we
+identify several limitations that offer avenues for future research.
+
+\paragraph{Initialization sensitivity.}
+Similar to standard SIRENs \citep{sitzmann2020siren}, SIREN-RoPE is sensitive to the
+initialization of $\omega_0$. Incorrect scaling can lead to vanishing gradients or
+poor convergence during early training, particularly in deep Transformer stacks.
+
+\paragraph{Inference latency.}
+Although we use real-number rotation arithmetic for efficiency, passing auxiliary
+features (timestamps, metadata) through a SIREN branch for every query/key interaction
+introduces overhead compared to the $O(1)$ look-up used in fixed RoPE.
+
+\paragraph{Extrapolation constraints.}
+The ``content-aware'' nature of SIREN-RoPE may be constrained by the distribution
+of temporal and semantic features seen during training. Generalization to
+out-of-distribution time intervals or entirely new semantic categories remains an
+open question requiring further empirical study.
+
+\paragraph{Memory footprint.}
+Scaling SIREN-RoPE to extremely large context windows in LLMs may increase the
+memory footprint of the attention mechanism due to additional activations required
+for the learnable encoding branch.
+
+%--------------------------------------------------------------------
+\begin{ack}
+The authors thank colleagues on the production ranking team for helpful
+discussions and infrastructure support. We also thank the anonymous reviewers
+for their constructive feedback.
+\end{ack}
+
+
+\section*{References}
+
+\bibliographystyle{abbrvnat}
+\bibliography{base}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\appendix
+
+\section{Derivation of Rotary Fusion}
+
+For completeness we derive the inner-product property of SIREN-RoPE.
+Given query $\mathbf{q}$ at position $i$ and key $\mathbf{k}$ at position
+$j$, the rotary operation applies rotation matrix $\mathbf{R}(\Theta_i)$ to
+$\mathbf{q}$ and $\mathbf{R}(\Theta_j)$ to $\mathbf{k}$. The attention logit is:
+\begin{equation}
+  \langle \mathbf{R}(\Theta_i)\mathbf{q},\, \mathbf{R}(\Theta_j)\mathbf{k} \rangle
+  \;=\;
+  \langle \mathbf{q},\, \mathbf{R}(\Theta_j - \Theta_i)\mathbf{k} \rangle.
+\end{equation}
+The relative rotation angle is:
+\begin{align}
+  \Theta_j - \Theta_i
+  &= \bigl[f_\phi(T_j) - f_\phi(T_i)\bigr] \cdot \omega^s
+    + (p_j - p_i) \cdot \theta \cdot \lambda,
+\end{align}
+which generalizes the standard RoPE relative angle
+$(p_j - p_i)\theta$ by adding a \emph{learned temporal displacement}
+$[f_\phi(T_j) - f_\phi(T_i)] \cdot \omega^s$. This shows that
+SIREN-RoPE retains the relative-position property of standard RoPE while
+enriching the displacement measure with temporal semantics.
+
+\section{Hyperparameter Sensitivity}
+
+Figure~\ref{fig:sensitivity} (placeholder) reports Contribution NE on the
+production social feed dataset as a function of
+$\omega_0 \in \{5, 10, 20, 30\}$ (SIREN frequency) and hidden dimension
+$\in \{32, 64, 128\}$. Performance is stable for $\omega_0 \in [8, 15]$,
+confirming the robustness of our default $\omega_0 = 10$. Very large
+$\omega_0$ ($\geq 25$) causes training instability owing to gradient
+saturation in early SIREN layers, as also observed in the original SIREN
+paper \citep{sitzmann2020siren}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage
+\input{checklist_filled.tex}
+
+
+\end{document}

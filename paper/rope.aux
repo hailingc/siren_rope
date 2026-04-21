@@ -1,0 +1,121 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{su2024roformer}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{1}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Key challenges}{2}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Our contributions.}{2}{subsection.1.2}\protected@file@percent }
+\citation{vaswani2017attention}
+\citation{shaw2018relative,dai2019transformerxl}
+\citation{raffel2020t5}
+\citation{su2024roformer}
+\citation{peng2023yarn,zhang2024longrope}
+\citation{kazemi2019time2vec}
+\citation{li2020tisasrec}
+\citation{he2020deberta}
+\citation{ke2020tupe}
+\citation{tancik2020fourier}
+\citation{sitzmann2020siren}
+\citation{fons2022hypertime,lenaour2024inrts}
+\citation{chen2018neuralode,kidger2020neuralcde}
+\citation{chen2024contiformer}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Evolution of Positional and Relative Inductive Biases.}{3}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Geometric Encoding via Rotary Dynamics.}{3}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Temporal Dynamics and Disentangled Representations.}{3}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implicit Neural Representations and Spectral Expressivity.}{3}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Bridging Discrete Attention and Continuous-Time Models.}{3}{section*.5}\protected@file@percent }
+\citation{sitzmann2020siren}
+\@writefile{toc}{\contentsline {section}{\numberline {3}SIREN-RoPE: Unified Rotary Encoding}{4}{section.3}\protected@file@percent }
+\newlabel{sec:method}{{3}{4}{SIREN-RoPE: Unified Rotary Encoding}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Problem Formulation}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Ordinal-Temporal Fusion}{4}{subsection.3.2}\protected@file@percent }
+\newlabel{eq:siren_rope}{{1}{4}{Ordinal-Temporal Fusion}{equation.1}{}}
+\newlabel{eq:rot_cos}{{2}{4}{Ordinal-Temporal Fusion}{equation.2}{}}
+\newlabel{eq:rot_sin}{{3}{4}{Ordinal-Temporal Fusion}{equation.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Initialization and convergence.}{4}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Recency bias.}{4}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Dual-Branch SIREN Architecture}{4}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:siren_arch}{{3.3}{4}{Dual-Branch SIREN Architecture}{subsection.3.3}{}}
+\newlabel{eq:dual_branch}{{4}{4}{Dual-Branch SIREN Architecture}{equation.4}{}}
+\citation{sitzmann2020siren,fons2022hypertime}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Temporal Input Features}{5}{subsection.3.4}\protected@file@percent }
+\newlabel{eq:temp_feat}{{5}{5}{Temporal Input Features}{equation.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}The SIREN-RoPE Framework}{5}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Multi-Scale Temporal Decomposition.}{5}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{The SIREN--DNN Dual Path.}{5}{section*.9}\protected@file@percent }
+\newlabel{eq:siren_rope_impl}{{6}{5}{The SIREN--DNN Dual Path}{equation.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{Computational Implementation.}{5}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Experiments}{5}{section.4}\protected@file@percent }
+\newlabel{sec:experiments}{{4}{5}{Experiments}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Experimental Setup}{5}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dataset.}{5}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Baselines.}{6}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implementation details.}{6}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Evaluation metrics.}{6}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Main Results}{6}{subsection.4.2}\protected@file@percent }
+\citation{sitzmann2020siren}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Engagement prediction on the production social feed dataset. NE: lower is better; AUC: higher is better. Best results are \textbf  {bolded}; second-best is \underline  {underlined}.}}{7}{table.1}\protected@file@percent }
+\newlabel{tab:main}{{1}{7}{Engagement prediction on the production social feed dataset. NE: lower is better; AUC: higher is better. Best results are \textbf {bolded}; second-best is \underline {underlined}}{table.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Ablation study on the production social feed dataset across all six metric--task combinations. NE: lower is better; AUC: higher is better. Best per column in \textbf  {bold}; second-best \underline  {underlined}. Groups separated by horizontal rules.}}{7}{table.2}\protected@file@percent }
+\newlabel{tab:ablation}{{2}{7}{Ablation study on the production social feed dataset across all six metric--task combinations. NE: lower is better; AUC: higher is better. Best per column in \textbf {bold}; second-best \underline {underlined}. Groups separated by horizontal rules}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Ablation Study}{7}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{(1)~Temporal signals must live in the rotation, not the embedding.}{7}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{(2)~Cyclical feature engineering: why \texttt  {(cos, sin)} pairs?}{7}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{(3)~The role of the SIREN branch with cyclical inputs.}{7}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{(4)~Semantic rotation: static signals belong in embeddings.}{8}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Efficiency analysis.}{8}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Discussion}{8}{section.5}\protected@file@percent }
+\newlabel{sec:discussion}{{5}{8}{Discussion}{section.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{The rotation space as a new research dimension.}{8}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{A quantum-mechanical parallel.}{8}{section*.21}\protected@file@percent }
+\citation{sitzmann2020siren}
+\@writefile{toc}{\contentsline {paragraph}{Why the dual-branch design is necessary.}{9}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Ordinal and temporal signals are complementary.}{9}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Generalization to language modeling.}{9}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Limitations.}{9}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion and Future Work}{9}{section.6}\protected@file@percent }
+\newlabel{sec:conclusion}{{6}{9}{Conclusion and Future Work}{section.6}{}}
+\citation{chen2023pi,peng2023yarn}
+\citation{sitzmann2020siren}
+\@writefile{toc}{\contentsline {paragraph}{Future work.}{10}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Broader Impact Statement}{10}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Positive impacts.}{10}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Potential negative impacts.}{10}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Limitations}{10}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Initialization sensitivity.}{10}{section*.29}\protected@file@percent }
+\bibstyle{abbrvnat}
+\bibdata{base}
+\bibcite{chen2018neuralode}{{1}{2018}{{Chen et~al.}}{{Chen, Rubanova, Bettencourt, and Duvenaud}}}
+\bibcite{chen2023pi}{{2}{2023}{{Chen et~al.}}{{Chen, Wong, Chen, and Tian}}}
+\bibcite{chen2024contiformer}{{3}{2024}{{Chen et~al.}}{{Chen, Ren, Wang, Fang, Sun, and Li}}}
+\bibcite{dai2019transformerxl}{{4}{2019}{{Dai et~al.}}{{Dai, Yang, Yang, Carbonell, Le, and Salakhutdinov}}}
+\bibcite{zhang2024longrope}{{5}{2024}{{Ding et~al.}}{{Ding, Zhang, Zhang, Xu, Shang, Xu, Yang, and Yang}}}
+\bibcite{fons2022hypertime}{{6}{2022}{{Fons et~al.}}{{Fons, Ruiz, Willetts, and Mayol-Cuevas}}}
+\bibcite{harper2015movielens}{{7}{2016}{{Harper and Konstan}}{{}}}
+\bibcite{he2020deberta}{{8}{2021}{{He et~al.}}{{He, Liu, Gao, and Chen}}}
+\bibcite{kang2018sasrec}{{9}{2018}{{Kang and McAuley}}{{}}}
+\bibcite{kazemi2019time2vec}{{10}{2019}{{Kazemi et~al.}}{{Kazemi, Goel, Jain, Kobyzev, Sethi, Forsyth, and Poupart}}}
+\bibcite{ke2020tupe}{{11}{2021}{{Ke et~al.}}{{Ke, He, and Liu}}}
+\bibcite{kidger2020neuralcde}{{12}{2020}{{Kidger et~al.}}{{Kidger, Morrill, Foster, and Lyons}}}
+\bibcite{lenaour2024inrts}{{13}{2024}{{Le~Naour et~al.}}{{Le~Naour, Serrano, Migus, Yin, Agoua, Baskiotis, Gallinari, and Cord}}}
+\bibcite{li2020tisasrec}{{14}{2020}{{Li et~al.}}{{Li, Wang, and McAuley}}}
+\bibcite{ni2019justifying}{{15}{2019}{{Ni et~al.}}{{Ni, Li, and McAuley}}}
+\@writefile{toc}{\contentsline {paragraph}{Inference latency.}{11}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Extrapolation constraints.}{11}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Memory footprint.}{11}{section*.32}\protected@file@percent }
+\bibcite{peng2023yarn}{{16}{2023}{{Peng et~al.}}{{Peng, Quesnelle, Fan, and Shippole}}}
+\bibcite{raffel2020t5}{{17}{2020}{{Raffel et~al.}}{{Raffel, Shazeer, Roberts, Lee, Narang, Matena, Zhou, Li, and Liu}}}
+\bibcite{shaw2018relative}{{18}{2018}{{Shaw et~al.}}{{Shaw, Uszkoreit, and Vaswani}}}
+\bibcite{sitzmann2020siren}{{19}{2020}{{Sitzmann et~al.}}{{Sitzmann, Martel, Bergman, Lindell, and Wetzstein}}}
+\bibcite{su2024roformer}{{20}{2024}{{Su et~al.}}{{Su, Ahmed, Lu, Pan, Bo, and Liu}}}
+\bibcite{sun2019bert4rec}{{21}{2019}{{Sun et~al.}}{{Sun, Liu, Wu, Pei, Lin, Ou, and Jiang}}}
+\bibcite{tancik2020fourier}{{22}{2020}{{Tancik et~al.}}{{Tancik, Srinivasan, Mildenhall, Fridovich-Keil, Raghavan, Singhal, Ramamoorthi, Barron, and Ng}}}
+\bibcite{vaswani2017attention}{{23}{2017}{{Vaswani et~al.}}{{Vaswani, Shazeer, Parmar, Uszkoreit, Jones, Gomez, Kaiser, and Polosukhin}}}
+\citation{sitzmann2020siren}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Derivation of Rotary Fusion}{12}{appendix.A}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B}Hyperparameter Sensitivity}{12}{appendix.B}\protected@file@percent }
+\citation{ni2019justifying}
+\gdef \@abspage@last{17}
