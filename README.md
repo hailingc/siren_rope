@@ -4,7 +4,7 @@
 
 *Hailing Cheng, Daqi Sun, Xinyu Lu — LinkedIn Inc.*
 
-> **NeurIPS 2026** · [Paper (PDF)](paper/siren_rope.tex)
+> **NeurIPS 2026** · [Paper (PDF)](paper/rope.pdf)
 
 ---
 
